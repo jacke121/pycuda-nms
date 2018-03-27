@@ -125,13 +125,65 @@ def test_nms(backend_pair, fargs):
 
     assert keep_ng == keep_ref
 
-
-if __name__ == '__main__':
-
-    from neon.backends.nervanagpu import NervanaGPU
+def test_cpu():
     from neon.backends.nervanacpu import NervanaCPU
 
-    ng = NervanaGPU()
+    # ng = NervanaGPU()
     nc = NervanaCPU()
+    # test_nms((ng, nc), (0.1, 5))
+    import datetime
+    time_old = datetime.datetime.now()
+    score = 4
+    box_count = 5
+    thre = 0.1
+    for i in range(10000):
+        dets = np.asarray(
+            [[1, 2, 3, 4, 0.6], [1, 3, 3, 4, 0.7], [1, 1, 4, 4, 0.9], [2, 1, 4, 4, 0.85], [1, 1, 3, 4, 0.85]],
+            dtype=np.float32)
+        print(dets)
+        dets[:, score] = np.sort(np.random.random((box_count,)))[::-1]
 
-    test_nms((ng, nc), (0.7, 5))
+        # call reference nms
+        keep_ref = py_cpu_nms(dets, thre)
+        # call cpu nms
+        # dets_nc = nc.array(dets)
+        # # tic_cpu = nc.init_mark()
+        # # toc_cpu = nc.init_mark()
+        # # nc.record_mark(tic_cpu)
+        #
+        # keep_nc = nc.nms(dets_nc, 0.1)
+        # print("keep_nc nms", keep_nc)
+
+    print('requests cpu', (datetime.datetime.now() - time_old).microseconds)
+
+def test_gpu():
+    from neon.backends.nervanagpu import NervanaGPU
+    ng = NervanaGPU()
+    # test_nms((ng, nc), (0.1, 5))
+    import datetime
+    time_old = datetime.datetime.now()
+    score = 4
+    box_count = 5
+    thre = 0.1
+    for i in range(10000):
+        dets = np.asarray(
+            [[1, 2, 3, 4, 0.6], [1, 3, 3, 4, 0.7], [1, 1, 4, 4, 0.9], [2, 1, 4, 4, 0.85], [1, 1, 3, 4, 0.85]],
+            dtype=np.float32)
+        # print(dets)
+
+        dets[:, score] = np.sort(np.random.random((box_count,)))[::-1]
+
+        dets_ng = ng.array(dets)
+        scores = dets_ng[:, 4].get()
+        order = scores.argsort()[::-1]
+
+        sorted_dets_dev = dets_ng[order, :]
+
+        keep_ng = ng.nms(sorted_dets_dev, thre)
+        # print("gpu nms", keep_ng)
+    print('requests gpu', (datetime.datetime.now() - time_old).microseconds)
+
+
+if __name__ == '__main__':
+    test_cpu()
+    test_gpu()
